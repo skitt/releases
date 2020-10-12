@@ -9,14 +9,15 @@ readonly ADMIRAL_CONSUMERS=(lighthouse submariner)
 readonly SHIPYARD_CONSUMERS=(admiral lighthouse submariner submariner-operator)
 
 function validate_release_fields() {
-    local missing=0
+    local errors=0
 
     function _validate() {
         local key=$1
 
         if [[ -z "${release[$key]}" ]]; then
             printerr "Missing value for ${key@Q}"
-            missing=$((missing+1))
+            errors=$((errors+1))
+            return 1
         fi
     }
 
@@ -25,11 +26,19 @@ function validate_release_fields() {
     _validate 'release-notes'
     _validate 'components'
     for project in ${PROJECTS[*]}; do
-        _validate "components.${project}"
+        if ! _validate "components.${project}"; then
+            continue
+        fi
+
+        local commit_hash="${release["components.${project}"]}"
+        if [[ ! $commit_hash =~ ^([0-9a-f]{7,40}|v[0-9a-z\.\-]+)$ ]]; then
+            printerr "Version of ${project} should be either a valid git commit hash or in the form v1.2.3: ${commit_hash}"
+            errors=$((errors+1))
+        fi
     done
 
-    if [[ $missing -gt 0 ]]; then
-        printerr "Missing values for ${missing} fields"
+    if [[ $errors -gt 0 ]]; then
+        printerr "Found ${errors} errors in the file"
         return 1
     fi
 }
